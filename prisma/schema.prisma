@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Video {
+  id            String    @id @default(cuid())
+  title         String
+  script        String
+  status        String    @default("generating")
+  pipelineStage String?
+  errorMessage  String?
+  retryCount    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  scenes        Scene[]
+  variants      Variant[]
+}
+
+model Scene {
+  id          String @id @default(cuid())
+  videoId     String
+  video       Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  order       Int
+  text        String
+  imagePrompt String
+  imageUrl    String?
+}
+
+model Variant {
+  id               String    @id @default(cuid())
+  videoId          String
+  video            Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  language         String
+  translatedScript String
+  ttsUrl           String?
+  srtUrl           String?
+  videoUrl         String?
+  youtubeVideoId   String?
+  title            String?
+  description      String?
+  tags             String?
+  approved         Boolean   @default(false)
+  uploadedAt       DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([videoId, language])
+}
+
+model Channel {
+  id           String      @id @default(cuid())
+  language     String      @unique
+  channelName  String
+  channelId    String
+  credential   Credential?
+}
+
+model Credential {
+  id           String   @id @default(cuid())
+  channelId    String   @unique
+  channel      Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+}
+
+model Schedule {
+  id          String @id @default(cuid())
+  uploadTime1 String @default("07:00")
+  uploadTime2 String @default("21:00")
+  timezone    String @default("Asia/Seoul")
+}
+
+model QuotaTracker {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  usedUnits Int      @default(0)
+  maxUnits  Int      @default(10000)
+}
