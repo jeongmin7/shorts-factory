@@ -1,13 +1,17 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateImage } from '@/lib/pipeline/image-generator'
 
-global.fetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: () => Promise.resolve({
-    output: { results: [{ url: 'https://example.com/image.png' }] },
-  }),
-  arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-}) as any
+global.fetch = vi.fn()
+  .mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({
+      images: [{ url: 'https://example.com/image.png' }],
+    }),
+  })
+  .mockResolvedValueOnce({
+    ok: true,
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+  }) as any
 
 vi.mock('fs/promises', () => ({
   default: { writeFile: vi.fn().mockResolvedValue(undefined), mkdir: vi.fn().mockResolvedValue(undefined) },

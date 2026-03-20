@@ -9,33 +9,32 @@ export async function generateImage(
   sceneIndex: number,
   seed: number = 42,
 ): Promise<string> {
-  const apiUrl = process.env.ZIMAGE_API_URL!
-  const apiKey = process.env.ZIMAGE_API_KEY!
+  const apiKey = process.env.FAL_KEY!
 
-  const response = await fetch(`${apiUrl}/api/v1/models/z-image-turbo/text-to-image`, {
+  const response = await fetch('https://queue.fal.run/fal-ai/z-image/turbo', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Key ${apiKey}`,
     },
     body: JSON.stringify({
-      input: {
-        prompt,
-        negative_prompt: 'blurry, low quality, distorted, watermark, text, realistic photo',
+      prompt,
+      negative_prompt: 'blurry, low quality, distorted, watermark, text, realistic photo',
+      image_size: {
         width: 1080,
         height: 1920,
-        seed,
-        num_inference_steps: 8,
       },
+      seed,
+      num_inference_steps: 8,
     }),
   })
 
   if (!response.ok) {
-    throw new Error(`Z-Image API error: ${response.status}`)
+    throw new Error(`fal.ai Z-Image API error: ${response.status}`)
   }
 
   const data = await response.json()
-  const imageUrl = data.output?.results?.[0]?.url
+  const imageUrl = data.images?.[0]?.url
 
   if (!imageUrl) throw new Error('No image URL in response')
 
