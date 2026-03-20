@@ -11,7 +11,7 @@ export async function generateImage(
 ): Promise<string> {
   const apiKey = process.env.FAL_KEY!
 
-  const response = await fetch('https://queue.fal.run/fal-ai/z-image/turbo', {
+  const response = await fetch('https://fal.run/fal-ai/z-image/turbo', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -19,24 +19,28 @@ export async function generateImage(
     },
     body: JSON.stringify({
       prompt,
-      negative_prompt: 'blurry, low quality, distorted, watermark, text, realistic photo',
       image_size: {
         width: 1080,
         height: 1920,
       },
       seed,
       num_inference_steps: 8,
+      num_images: 1,
+      output_format: 'png',
     }),
   })
 
   if (!response.ok) {
-    throw new Error(`fal.ai Z-Image API error: ${response.status}`)
+    const errorText = await response.text()
+    throw new Error(`fal.ai Z-Image API error: ${response.status} - ${errorText}`)
   }
 
   const data = await response.json()
   const imageUrl = data.images?.[0]?.url
 
-  if (!imageUrl) throw new Error('No image URL in response')
+  if (!imageUrl) {
+    throw new Error(`No image URL in response: ${JSON.stringify(data)}`)
+  }
 
   const imageResponse = await fetch(imageUrl)
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
