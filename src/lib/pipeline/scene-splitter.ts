@@ -23,6 +23,7 @@ Style guide for image prompts:
 - Vibrant colors
 - Vertical composition (9:16 aspect ratio)
 - Do NOT use real person names in prompts, use descriptive terms instead
+- IMPORTANT: Keep prompts SAFE and FAMILY-FRIENDLY. No violence, gore, blood, nudity, horror, or disturbing imagery. Use lighthearted, comedic descriptions only. Avoid words like: gruesome, flesh, tearing, blood, wound, death, kill, scary, horror, disturbing
 
 Respond ONLY with valid JSON in this format:
 {
