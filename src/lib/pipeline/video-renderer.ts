@@ -53,18 +53,38 @@ export async function renderVideo(
 ): Promise<string> {
   const entryPoint = path.resolve('./src/remotion/index.ts')
   const bundled = await bundle({ entryPoint })
-  const compositions = await getCompositions(bundled)
+
+  // Remotion은 headless 브라우저에서 렌더링하므로
+  // 로컬 파일을 번들 디렉토리에 복사해야 접근 가능
+  const assetDir = path.join(bundled, 'assets')
+  await fs.mkdir(assetDir, { recursive: true })
+
+  // 이미지를 번들에 복사
+  const mappedScenes = await Promise.all(
+    scenes.map(async (s, i) => {
+      const srcPath = path.resolve(s.imageUrl)
+      const destFileName = `scene-${i}.png`
+      await fs.copyFile(srcPath, path.join(assetDir, destFileName))
+      return {
+        ...s,
+        imageUrl: `assets/${destFileName}`,
+      }
+    }),
+  )
+
+  // 오디오를 번들에 복사
+  const audioFileName = `audio-${language}.wav`
+  await fs.copyFile(path.resolve(audioPath), path.join(assetDir, audioFileName))
+
+  const props = buildRenderProps(mappedScenes, audioDurationSec)
+  props.audioUrl = `assets/${audioFileName}`
+
+  const compositions = await getCompositions(bundled, {
+    inputProps: props as unknown as Record<string, unknown>,
+  })
   const composition = compositions.find((c) => c.id === 'ShortsVideo')
 
   if (!composition) throw new Error('ShortsVideo composition not found')
-
-  // Remotion은 URL로 파일을 불러오므로 절대 경로로 변환
-  const absoluteScenes = scenes.map((s) => ({
-    ...s,
-    imageUrl: path.resolve(s.imageUrl),
-  }))
-  const props = buildRenderProps(absoluteScenes, audioDurationSec)
-  props.audioUrl = path.resolve(audioPath)
 
   const outputDir = path.join(UPLOAD_DIR, videoId, 'videos')
   await fs.mkdir(outputDir, { recursive: true })
