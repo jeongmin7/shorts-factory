@@ -58,8 +58,13 @@ export async function renderVideo(
 
   if (!composition) throw new Error('ShortsVideo composition not found')
 
-  const props = buildRenderProps(scenes, audioDurationSec)
-  props.audioUrl = audioPath
+  // Remotion은 URL로 파일을 불러오므로 절대 경로로 변환
+  const absoluteScenes = scenes.map((s) => ({
+    ...s,
+    imageUrl: path.resolve(s.imageUrl),
+  }))
+  const props = buildRenderProps(absoluteScenes, audioDurationSec)
+  props.audioUrl = path.resolve(audioPath)
 
   const outputDir = path.join(UPLOAD_DIR, videoId, 'videos')
   await fs.mkdir(outputDir, { recursive: true })

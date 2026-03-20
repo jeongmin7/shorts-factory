@@ -1,4 +1,4 @@
-import { AbsoluteFill, Img, Audio, Sequence } from 'remotion'
+import { AbsoluteFill, Audio, Sequence } from 'remotion'
 import { SubtitleOverlay } from './SubtitleOverlay'
 
 export interface SceneInput {
@@ -33,7 +33,7 @@ export const ShortsVideo: React.FC<ShortsVideoProps> = ({
         return (
           <Sequence key={index} from={from} durationInFrames={scene.durationInFrames}>
             <AbsoluteFill>
-              <Img
+              <img
                 src={scene.imageUrl}
                 style={{
                   width: '100%',
