@@ -35,7 +35,8 @@ export async function runPipeline(videoId: string): Promise<void> {
     )
 
     // Create variants (en 제외 - voice 미설정)
-    const languages = ['ko', 'ja'] as const
+    // TODO: 'ko' 추가 (ElevenLabs 크레딧 충전 후)
+    const languages = ['ja'] as const
     for (const lang of languages) {
       const translatedScript = scenes
         .map((s) => s[`text_${lang}`])
@@ -66,12 +67,10 @@ export async function runPipeline(videoId: string): Promise<void> {
     await updateStage(videoId, 'tts')
     const ttsResults: Record<string, string> = {}
 
-    const [koTts, jaTts] = await Promise.all([
-      withRetry(() => generateTTS(scenes.map((s) => s.text_ko).join(' '), 'ko', videoId)),
-      withRetry(() => generateTTSVoicevox(scenes.map((s) => s.text_ja).join(' '), videoId)),
-    ])
-
-    ttsResults.ko = koTts
+    // TODO: 한국어 TTS 추가 (ElevenLabs 크레딧 충전 후)
+    // const koTts = await withRetry(() => generateTTS(scenes.map((s) => s.text_ko).join(' '), 'ko', videoId))
+    // ttsResults.ko = koTts
+    const jaTts = await withRetry(() => generateTTSVoicevox(scenes.map((s) => s.text_ja).join(' '), videoId))
     ttsResults.ja = jaTts
 
     for (const lang of languages) {
