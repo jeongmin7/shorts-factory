@@ -73,7 +73,7 @@ export async function renderVideo(
     serveUrl: bundled,
     codec: 'h264',
     outputLocation: outputPath,
-    inputProps: props,
+    inputProps: props as unknown as Record<string, unknown>,
   })
 
   return outputPath
