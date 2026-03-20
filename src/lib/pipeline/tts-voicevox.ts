@@ -3,7 +3,7 @@ import path from 'path'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 const VOICEVOX_URL = process.env.VOICEVOX_URL || 'http://localhost:50021'
-const SPEAKER_ID = 1
+const SPEAKER_ID = 11 // 玄野武宏 (ノーマル)
 
 export async function generateTTSVoicevox(
   text: string,
