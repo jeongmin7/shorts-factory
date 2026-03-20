@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { StatusBadge } from '@/components/StatusBadge'
+import { RetryButton } from '@/components/RetryButton'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
@@ -33,9 +34,13 @@ export default async function VideoDetailPage({
         <StatusBadge status={video.status} />
       </div>
 
-      {video.errorMessage && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4">
-          <p className="text-red-400 text-sm">{video.errorMessage}</p>
+      {video.status === 'failed' && (
+        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-red-400 text-sm">{video.errorMessage}</p>
+            <p className="text-red-400/60 text-xs mt-1">실패 단계: {video.pipelineStage}</p>
+          </div>
+          <RetryButton videoId={id} />
         </div>
       )}
 
