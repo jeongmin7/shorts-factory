@@ -37,16 +37,19 @@ export async function runPipeline(videoId: string): Promise<void> {
 
     let scenes: SceneData[]
     let dbScenes = video.scenes
+    let stylePrefix = ''
 
     // Stage 1: Scene split + translate
     if (shouldRun('scene_split', lastFailedStage) && !isResume) {
       await updateStage(videoId, 'scene_split')
       const result = await withRetry(() => splitAndTranslate(video.script))
       scenes = result.scenes
+      stylePrefix = result.stylePrefix
 
       const seed = Math.floor(Math.random() * 100000)
       await prisma.video.update({ where: { id: videoId }, data: { retryCount: seed } })
 
+      // 첫 번째 장면의 imagePrompt 앞에 stylePrefix 저장 (재시도 시 복원용)
       dbScenes = await Promise.all(
         scenes.map((scene, i) =>
           prisma.scene.create({
@@ -54,7 +57,9 @@ export async function runPipeline(videoId: string): Promise<void> {
               videoId,
               order: i,
               text: scene.text_ko,
-              imagePrompt: scene.imagePrompt,
+              imagePrompt: i === 0
+                ? `[STYLE]${stylePrefix}[/STYLE]${scene.imagePrompt}`
+                : scene.imagePrompt,
             },
           }),
         ),
@@ -71,11 +76,21 @@ export async function runPipeline(videoId: string): Promise<void> {
     } else {
       // Resume: DB에서 장면 데이터 복원
       const variants = await prisma.variant.findMany({ where: { videoId } })
+
+      // stylePrefix 복원
+      const firstScene = dbScenes[0]
+      if (firstScene) {
+        const styleMatch = firstScene.imagePrompt.match(/\[STYLE\](.*?)\[\/STYLE\]/)
+        if (styleMatch) {
+          stylePrefix = styleMatch[1]
+        }
+      }
+
       scenes = dbScenes.map((s, i) => ({
         text_ko: s.text,
         text_en: '',
         text_ja: variants.find((v) => v.language === 'ja')?.translatedScript.split('\n')[i] || '',
-        imagePrompt: s.imagePrompt,
+        imagePrompt: s.imagePrompt.replace(/\[STYLE\].*?\[\/STYLE\]/, ''),
       }))
     }
 
@@ -86,7 +101,7 @@ export async function runPipeline(videoId: string): Promise<void> {
       for (let i = 0; i < dbScenes.length; i++) {
         if (dbScenes[i].imageUrl) continue // 이미 생성된 이미지 스킵
         const imagePath = await withRetry(() =>
-          generateImage(scenes[i].imagePrompt, videoId, i, seed),
+          generateImage(scenes[i].imagePrompt, videoId, i, seed, stylePrefix),
         )
         await prisma.scene.update({
           where: { id: dbScenes[i].id },

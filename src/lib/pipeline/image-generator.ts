@@ -8,8 +8,14 @@ export async function generateImage(
   videoId: string,
   sceneIndex: number,
   seed: number = 42,
+  stylePrefix: string = '',
 ): Promise<string> {
   const apiKey = process.env.FAL_KEY!
+
+  // 스타일 프리픽스 + 장면 프롬프트 결합
+  const fullPrompt = stylePrefix
+    ? `${stylePrefix}. ${prompt}`
+    : prompt
 
   const response = await fetch('https://fal.run/fal-ai/z-image/turbo', {
     method: 'POST',
@@ -18,7 +24,7 @@ export async function generateImage(
       'Authorization': `Key ${apiKey}`,
     },
     body: JSON.stringify({
-      prompt,
+      prompt: fullPrompt,
       image_size: {
         width: 1080,
         height: 1920,
