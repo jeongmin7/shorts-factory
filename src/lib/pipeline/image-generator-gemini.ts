@@ -4,23 +4,29 @@ import path from 'path'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 
+export type GeminiImageModel =
+  | 'gemini-2.5-flash-preview-image'
+  | 'gemini-3.1-flash-image-preview'
+  | 'gemini-3-pro-image-preview'
+
 export async function generateImageGemini(
   prompt: string,
   videoId: string,
   sceneIndex: number,
   stylePrefix: string = '',
+  model: GeminiImageModel = 'gemini-2.5-flash-preview-image',
 ): Promise<string> {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  const genModel = genAI.getGenerativeModel({ model })
 
   const fullPrompt = stylePrefix
     ? `Generate an image: ${stylePrefix}. ${prompt}. Vertical 9:16 aspect ratio.`
     : `Generate an image: ${prompt}. Vertical 9:16 aspect ratio.`
 
-  const result = await model.generateContent({
+  const result = await genModel.generateContent({
     contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
     generationConfig: {
-      responseModalities: ['image', 'text'],
+      responseModalities: ['TEXT', 'IMAGE'],
     } as any,
   })
 
@@ -41,8 +47,7 @@ export async function generateImageGemini(
   const dir = path.join(UPLOAD_DIR, videoId, 'images')
   await fs.mkdir(dir, { recursive: true })
 
-  const ext = imageData.mimeType?.includes('png') ? 'png' : 'png'
-  const filePath = path.join(dir, `scene-${sceneIndex}.${ext}`)
+  const filePath = path.join(dir, `scene-${sceneIndex}.png`)
   await fs.writeFile(filePath, imageBuffer)
 
   return filePath

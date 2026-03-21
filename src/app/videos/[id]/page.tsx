@@ -40,7 +40,7 @@ export default async function VideoDetailPage({
             <p className="text-red-400 text-sm">{video.errorMessage}</p>
             <p className="text-red-400/60 text-xs mt-1">실패 단계: {video.pipelineStage}</p>
           </div>
-          <RetryButton videoId={id} />
+          <RetryButton videoId={id} failedStage={video.pipelineStage} />
         </div>
       )}
 

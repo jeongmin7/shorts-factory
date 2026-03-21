@@ -1,4 +1,5 @@
 import { StatusBadge } from './StatusBadge'
+import { ProgressBar } from './ProgressBar'
 import Link from 'next/link'
 
 interface VideoCardProps {
@@ -10,7 +11,7 @@ interface VideoCardProps {
   variants: Array<{ language: string; approved: boolean; uploadedAt: string | null }>
 }
 
-export function VideoCard({ id, title, status, pipelineStage, createdAt, variants }: VideoCardProps) {
+export function VideoCard({ id, title, status, createdAt, variants }: VideoCardProps) {
   return (
     <Link href={`/videos/${id}`}>
       <div className="bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition cursor-pointer">
@@ -18,8 +19,8 @@ export function VideoCard({ id, title, status, pipelineStage, createdAt, variant
           <h3 className="text-white font-medium truncate flex-1">{title}</h3>
           <StatusBadge status={status} />
         </div>
-        {status === 'generating' && pipelineStage && (
-          <p className="text-yellow-400 text-xs mb-2">진행: {pipelineStage}</p>
+        {(status === 'generating' || status === 'failed') && (
+          <ProgressBar videoId={id} />
         )}
         <div className="flex gap-2 mt-2">
           {variants.map((v) => (
