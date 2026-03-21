@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { runPipeline } from '@/lib/pipeline'
+import { runPipeline, type ImageModel } from '@/lib/pipeline'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { title, script } = await request.json()
+  const { title, script, imageModel = 'fal' } = await request.json()
 
   if (!title || !script) {
     return NextResponse.json({ error: 'title and script are required' }, { status: 400 })
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     data: { title, script },
   })
 
-  runPipeline(video.id)
+  runPipeline(video.id, imageModel as ImageModel)
 
   return NextResponse.json({ id: video.id, status: 'generating' })
 }

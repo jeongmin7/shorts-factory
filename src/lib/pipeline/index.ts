@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { splitAndTranslate, type SceneData } from './scene-splitter'
 import { generateImage } from './image-generator'
+import { generateImageGemini } from './image-generator-gemini'
 import { generateTTS } from './tts-elevenlabs'
 import { generateTTSVoicevox } from './tts-voicevox'
 import { saveSRT } from './srt-generator'
@@ -22,7 +23,9 @@ function shouldRun(currentStage: Stage, lastFailedStage: string | null): boolean
 // TODO: 'ko' 추가 (ElevenLabs 크레딧 충전 후)
 const languages = ['ja'] as const
 
-export async function runPipeline(videoId: string): Promise<void> {
+export type ImageModel = 'fal' | 'gemini'
+
+export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal'): Promise<void> {
   try {
     const video = await prisma.video.findUniqueOrThrow({
       where: { id: videoId },
@@ -101,7 +104,9 @@ export async function runPipeline(videoId: string): Promise<void> {
       for (let i = 0; i < dbScenes.length; i++) {
         if (dbScenes[i].imageUrl) continue // 이미 생성된 이미지 스킵
         const imagePath = await withRetry(() =>
-          generateImage(scenes[i].imagePrompt, videoId, i, seed, stylePrefix),
+          imageModel === 'gemini'
+            ? generateImageGemini(scenes[i].imagePrompt, videoId, i, stylePrefix)
+            : generateImage(scenes[i].imagePrompt, videoId, i, seed, stylePrefix),
         )
         await prisma.scene.update({
           where: { id: dbScenes[i].id },

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 export function ScriptForm() {
   const [title, setTitle] = useState('')
   const [script, setScript] = useState('')
+  const [imageModel, setImageModel] = useState<'fal' | 'gemini'>('fal')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
@@ -19,7 +20,7 @@ export function ScriptForm() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, script }),
+        body: JSON.stringify({ title, script, imageModel }),
       })
 
       if (!res.ok) {
@@ -62,6 +63,35 @@ export function ScriptForm() {
           maxLength={2000}
           required
         />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">이미지 생성 모델</label>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setImageModel('fal')}
+            className={`flex-1 p-3 rounded-lg border transition ${
+              imageModel === 'fal'
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+            }`}
+          >
+            <div className="font-medium">Z-Image (fal.ai)</div>
+            <div className="text-xs mt-1 opacity-70">$0.01/장 | 빠름</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setImageModel('gemini')}
+            className={`flex-1 p-3 rounded-lg border transition ${
+              imageModel === 'gemini'
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+            }`}
+          >
+            <div className="font-medium">Gemini</div>
+            <div className="text-xs mt-1 opacity-70">무료 500장/일</div>
+          </button>
+        </div>
       </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button
