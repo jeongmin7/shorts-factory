@@ -172,10 +172,11 @@ export async function runPipeline(
         if (!variant?.ttsUrl) continue // TTS 없으면 SRT 스킵
 
         const audioDuration = await getAudioDuration(variant!.ttsUrl!)
-        const durationPerScene = audioDuration / scenes.length
-        const srtScenes = scenes.map((s) => ({
-          text: s[`text_${lang}`],
-          durationSec: durationPerScene,
+        const texts = scenes.map((s) => s[`text_${lang}`] as string)
+        const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
+        const srtScenes = texts.map((text) => ({
+          text,
+          durationSec: totalChars > 0 ? (text.length / totalChars) * audioDuration : audioDuration / scenes.length,
         }))
         const srtPath = await saveSRT(srtScenes, videoId, lang)
         await prisma.variant.update({
