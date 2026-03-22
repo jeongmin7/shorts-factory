@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
 
-MODEL_NAME = "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"
+MODEL_NAME = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"
 
 # Global model reference (loaded on startup, can be unloaded)
 generator = None
