@@ -51,7 +51,7 @@ def synthesize():
         audio_segments = []
         sample_rate = 24000
 
-        for result in model.generate(text=text, lang_code=language):
+        for result in model.generate(text=text, instruct="차분한 30대 여성", speed=1.4, lang_code=language):
             audio_segments.append(result.audio)
             sample_rate = result.sample_rate
 
