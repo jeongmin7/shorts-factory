@@ -3,7 +3,7 @@ import { splitAndTranslate, type SceneData } from './scene-splitter'
 import { generateImage } from './image-generator'
 import { generateImageGemini, type GeminiImageModel } from './image-generator-gemini'
 import { generateTTSVoicevox } from './tts-voicevox'
-import { generateTTSQwen3, isQwen3Available, unloadQwen3Model } from './tts-qwen3'
+import { generateTTSQwen3PerScene, isQwen3Available, unloadQwen3Model } from './tts-qwen3'
 import { saveSRT } from './srt-generator'
 import { renderVideo } from './video-renderer'
 import { withRetry } from './retry'
@@ -121,6 +121,9 @@ export async function runPipeline(
       }
     }
 
+    // Per-scene durations for accurate SRT timing (populated by Qwen3 TTS)
+    const sceneDurationsMap: Record<string, number[]> = {}
+
     // Stage 3: TTS
     if (shouldRun('tts', lastFailedStage)) {
       await updateStage(videoId, 'tts')
@@ -142,9 +145,15 @@ export async function runPipeline(
             generateTTSVoicevox(scenes.map((s) => s.text_ja).join(' '), videoId),
           )
         } else if (qwen3Available) {
-          ttsPath = await withRetry(() =>
-            generateTTSQwen3(scenes.map((s) => s[`text_${lang}`]).join(' '), lang, videoId),
+          const result = await withRetry(() =>
+            generateTTSQwen3PerScene(
+              scenes.map((s) => s[`text_${lang}`] as string),
+              lang,
+              videoId,
+            ),
           )
+          ttsPath = result.filePath
+          sceneDurationsMap[lang] = result.sceneDurations
         } else {
           continue // Skip this language if Qwen3 unavailable
         }
@@ -171,13 +180,24 @@ export async function runPipeline(
         if (variant?.srtUrl) continue // 이미 생성된 SRT 스킵
         if (!variant?.ttsUrl) continue // TTS 없으면 SRT 스킵
 
-        const audioDuration = await getAudioDuration(variant!.ttsUrl!)
         const texts = scenes.map((s) => s[`text_${lang}`] as string)
-        const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
-        const srtScenes = texts.map((text) => ({
-          text,
-          durationSec: totalChars > 0 ? (text.length / totalChars) * audioDuration : audioDuration / scenes.length,
-        }))
+        let srtScenes: { text: string; durationSec: number }[]
+
+        if (sceneDurationsMap[lang]) {
+          // Exact per-scene durations from Qwen3-TTS
+          srtScenes = texts.map((text, i) => ({
+            text,
+            durationSec: sceneDurationsMap[lang][i] ?? 0,
+          }))
+        } else {
+          // Fallback: estimate by text length ratio (for VOICEVOX etc.)
+          const audioDuration = getAudioDuration(variant!.ttsUrl!)
+          const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
+          srtScenes = texts.map((text) => ({
+            text,
+            durationSec: totalChars > 0 ? (text.length / totalChars) * audioDuration : audioDuration / scenes.length,
+          }))
+        }
         const srtPath = await saveSRT(srtScenes, videoId, lang)
         await prisma.variant.update({
           where: { videoId_language: { videoId, language: lang } },
