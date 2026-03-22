@@ -43,15 +43,18 @@ export function detectSceneBoundaries(filePath: string, expectedScenes: number):
       }
     }
 
-    // Skip leading silence (first silence that starts at/near 0)
-    const gaps = silences.filter((s) => s.start > 0.5)
+    // Skip leading/trailing silence
+    const gaps = silences.filter((s) => s.start > 0.3 && s.end < duration - 0.3)
 
     // We need (expectedScenes - 1) boundaries
     const neededBoundaries = expectedScenes - 1
 
-    // Use the midpoint of each silence gap as the boundary
+    // Pick the N-1 LONGEST silences (these are the sentence boundaries)
+    // then sort them by time position
     const boundaries = gaps
+      .sort((a, b) => (b.end - b.start) - (a.end - a.start))
       .slice(0, neededBoundaries)
+      .sort((a, b) => a.start - b.start)
       .map((s) => (s.start + s.end) / 2)
 
     // If we found fewer boundaries than needed, fill with equal splits
