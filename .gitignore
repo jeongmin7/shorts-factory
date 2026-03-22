@@ -48,3 +48,7 @@ uploads/
 *.db-journal
 .env
 .env.local
+
+# Python TTS server
+scripts/.venv/
+scripts/test_*.wav
