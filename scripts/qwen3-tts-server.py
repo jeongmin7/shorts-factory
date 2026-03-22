@@ -6,6 +6,8 @@ from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
 
+MODEL_NAME = "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"
+
 # Global model reference (loaded on startup, can be unloaded)
 generator = None
 
@@ -13,8 +15,8 @@ generator = None
 def get_generator():
     global generator
     if generator is None:
-        from mlx_audio.tts import TTS
-        generator = TTS("mlx-community/Qwen3-TTS-0.6B-4bit")
+        from mlx_audio.tts import load
+        generator = load(MODEL_NAME)
     return generator
 
 
@@ -40,20 +42,29 @@ def synthesize():
     if language not in valid_languages:
         return jsonify({"error": f"language must be one of {valid_languages}"}), 400
 
-    # Select voice based on language
-    voice_map = {
-        "ko": "Chelsie",
-        "en": "Chelsie",
-    }
-    voice = voice_map[language]
-
     try:
-        tts = get_generator()
-        audio = tts.generate(text=text, speaker=voice)
+        model = get_generator()
+
+        # model.generate() returns a Generator of GenerationResult
+        # Collect all segments and concatenate audio
+        import mlx.core as mx
+        audio_segments = []
+        sample_rate = 24000
+
+        for result in model.generate(text=text, lang_code=language):
+            audio_segments.append(result.audio)
+            sample_rate = result.sample_rate
+
+        if not audio_segments:
+            return jsonify({"error": "No audio generated"}), 500
+
+        # Concatenate all segments
+        full_audio = mx.concatenate(audio_segments, axis=0)
+        audio_list = full_audio.tolist()
 
         # Write to in-memory WAV buffer
         buf = io.BytesIO()
-        sf.write(buf, audio["audio"], audio["sample_rate"], format="WAV")
+        sf.write(buf, audio_list, sample_rate, format="WAV")
         buf.seek(0)
 
         return send_file(buf, mimetype="audio/wav", download_name="output.wav")
