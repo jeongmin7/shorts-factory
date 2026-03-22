@@ -1,7 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { execSync } from 'child_process'
-import { getAudioDuration } from '@/lib/audio-utils'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 const QWEN3_TTS_URL = process.env.QWEN3_TTS_URL || 'http://localhost:5050'
@@ -18,8 +17,9 @@ export async function isQwen3Available(): Promise<boolean> {
 }
 
 /**
- * Generate TTS for each scene separately and concatenate.
- * Returns the final audio path and per-scene durations.
+ * Generate TTS for all scenes in one call (consistent voice).
+ * Uses /synthesize_scenes which joins texts with \n and splits internally.
+ * Returns the final concatenated audio path and per-scene durations.
  */
 export async function generateTTSQwen3PerScene(
   sceneTexts: string[],
@@ -29,32 +29,31 @@ export async function generateTTSQwen3PerScene(
   const dir = path.join(UPLOAD_DIR, videoId, 'tts')
   await fs.mkdir(dir, { recursive: true })
 
-  const scenePaths: string[] = []
+  // Single API call for all scenes — consistent voice across segments
+  const response = await fetch(`${QWEN3_TTS_URL}/synthesize_scenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenes: sceneTexts, language }),
+    signal: AbortSignal.timeout(300_000),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+    throw new Error(`Qwen3-TTS batch synthesis error for ${language}: ${response.status} - ${error.error}`)
+  }
+
+  const data = await response.json()
+  const segments = data.segments as { audio: string; duration: number }[]
   const sceneDurations: number[] = []
+  const scenePaths: string[] = []
 
-  // Generate TTS per scene
-  for (let i = 0; i < sceneTexts.length; i++) {
-    const text = sceneTexts[i]
+  // Write each segment to a temp WAV file
+  for (let i = 0; i < segments.length; i++) {
     const scenePath = path.join(dir, `${language}_scene_${i}.wav`)
-
-    const response = await fetch(`${QWEN3_TTS_URL}/synthesize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, language }),
-      signal: AbortSignal.timeout(120_000),
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(`Qwen3-TTS synthesis error for ${language} scene ${i}: ${response.status} - ${error.error}`)
-    }
-
-    const audioBuffer = Buffer.from(await response.arrayBuffer())
+    const audioBuffer = Buffer.from(segments[i].audio, 'base64')
     await fs.writeFile(scenePath, audioBuffer)
-
-    const duration = getAudioDuration(scenePath)
     scenePaths.push(scenePath)
-    sceneDurations.push(duration)
+    sceneDurations.push(segments[i].duration)
   }
 
   // Concatenate all scene audio files using ffmpeg

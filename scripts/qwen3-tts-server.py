@@ -72,6 +72,51 @@ def synthesize():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/synthesize_scenes", methods=["POST"])
+def synthesize_scenes():
+    """Generate TTS for multiple scenes in one call (consistent voice).
+    Body: {"scenes": ["text1", "text2", ...], "language": "ko"}
+    Returns: {"segments": [{"audio": base64, "duration": float}, ...]}
+    """
+    data = request.get_json()
+    if not data or "scenes" not in data:
+        return jsonify({"error": "scenes array is required"}), 400
+
+    scene_texts = data["scenes"]
+    if not isinstance(scene_texts, list) or len(scene_texts) == 0:
+        return jsonify({"error": "scenes must be a non-empty array"}), 400
+
+    language = data.get("language", "ko")
+    valid_languages = {"ko", "en"}
+    if language not in valid_languages:
+        return jsonify({"error": f"language must be one of {valid_languages}"}), 400
+
+    try:
+        model = get_generator()
+        import mlx.core as mx
+        import base64
+
+        # Join scenes with \n so model splits them internally (consistent voice)
+        combined_text = "\n".join(scene_texts)
+
+        segments = []
+        sample_rate = 24000
+
+        for result in model.generate(text=combined_text, instruct="차분한 30대 여성", speed=1.4, lang_code=language):
+            sample_rate = result.sample_rate
+            buf = io.BytesIO()
+            sf.write(buf, result.audio.tolist(), sample_rate, format="WAV")
+            audio_b64 = base64.b64encode(buf.getvalue()).decode()
+            segments.append({
+                "audio": audio_b64,
+                "duration": result.samples / sample_rate,
+            })
+
+        return jsonify({"segments": segments, "sample_rate": sample_rate})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/unload", methods=["POST"])
 def unload():
     global generator
