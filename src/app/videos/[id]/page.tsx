@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { StatusBadge } from '@/components/StatusBadge'
 import { RetryButton } from '@/components/RetryButton'
+import { RerenderButton } from '@/components/RerenderButton'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
@@ -33,6 +34,13 @@ export default async function VideoDetailPage({
         <h1 className="text-xl font-bold text-white flex-1">{video.title}</h1>
         <StatusBadge status={video.status} />
       </div>
+
+      {video.status === 'completed' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 mb-4 flex items-center justify-between">
+          <p className="text-gray-400 text-sm">이미지 유지, 음성+자막+영상만 다시 생성</p>
+          <RerenderButton videoId={id} />
+        </div>
+      )}
 
       {video.status === 'failed' && (
         <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 flex items-center justify-between">

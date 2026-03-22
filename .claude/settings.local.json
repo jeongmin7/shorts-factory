@@ -17,7 +17,9 @@
       "Bash(ffprobe -v error -show_entries format=duration -of csv=p=0 test_1.7b_ko.wav)",
       "Bash(__NEW_LINE_a27a3fea6704aee3__ echo:*)",
       "Bash(curl -s -X POST http://localhost:5050/synthesize -H \"Content-Type: application/json\" -d '{\"\"text\"\": \"\"Hello. Today I will tell you an interesting story.\"\", \"\"language\"\": \"\"en\"\"}' --output test_1.7b_en.wav)",
-      "Bash(ffprobe -v error -show_entries format=duration -of csv=p=0 test_1.7b_en.wav)"
+      "Bash(ffprobe -v error -show_entries format=duration -of csv=p=0 test_1.7b_en.wav)",
+      "Bash(chmod +x /Users/jeongmin/youtube-shorts-automation/scripts/test-subtitle-sync.sh)",
+      "Bash(./scripts/test-subtitle-sync.sh uploads/cmn1tgkkp000fra3nms1tis5u/tts/ko.wav 6)"
     ]
   }
 }
