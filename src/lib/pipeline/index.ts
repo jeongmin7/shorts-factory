@@ -21,7 +21,7 @@ function shouldRun(currentStage: Stage, lastFailedStage: string | null): boolean
 }
 
 type Language = 'ja' | 'ko' | 'en'
-const BASE_LANGUAGES: Language[] = ['ja', 'ko']
+const BASE_LANGUAGES: Language[] = ['ja', 'ko', 'en']
 
 export type ImageModel = 'fal' | 'gemini-2.5-flash-preview-image' | 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image-preview'
 
