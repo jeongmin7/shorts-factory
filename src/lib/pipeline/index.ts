@@ -8,7 +8,7 @@ import { saveSRT } from './srt-generator'
 import { renderVideo } from './video-renderer'
 import { withRetry } from './retry'
 import { sendVideoForApproval, sendErrorNotification } from '@/services/telegram'
-import { getAudioDuration } from '@/lib/audio-utils'
+import { getAudioDuration, detectSceneBoundaries } from '@/lib/audio-utils'
 
 const STAGES = ['scene_split', 'image_gen', 'tts', 'srt', 'render', 'notify'] as const
 type Stage = typeof STAGES[number]
@@ -171,12 +171,12 @@ export async function runPipeline(
         if (variant?.srtUrl) continue // 이미 생성된 SRT 스킵
         if (!variant?.ttsUrl) continue // TTS 없으면 SRT 스킵
 
-        const audioDuration = getAudioDuration(variant!.ttsUrl!)
         const texts = scenes.map((s) => s[`text_${lang}`] as string)
-        const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
-        const srtScenes = texts.map((text) => ({
+        // Detect actual silence gaps in audio to find scene boundaries
+        const sceneDurations = detectSceneBoundaries(variant!.ttsUrl!, texts.length)
+        const srtScenes = texts.map((text, i) => ({
           text,
-          durationSec: totalChars > 0 ? (text.length / totalChars) * audioDuration : audioDuration / scenes.length,
+          durationSec: sceneDurations[i],
         }))
         const srtPath = await saveSRT(srtScenes, videoId, lang)
         await prisma.variant.update({
