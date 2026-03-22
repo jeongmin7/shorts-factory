@@ -2,8 +2,8 @@ import { prisma } from '@/lib/db'
 import { splitAndTranslate, type SceneData } from './scene-splitter'
 import { generateImage } from './image-generator'
 import { generateImageGemini, type GeminiImageModel } from './image-generator-gemini'
-import { generateTTS } from './tts-elevenlabs'
 import { generateTTSVoicevox } from './tts-voicevox'
+import { generateTTSQwen3, isQwen3Available, unloadQwen3Model } from './tts-qwen3'
 import { saveSRT } from './srt-generator'
 import { renderVideo } from './video-renderer'
 import { withRetry } from './retry'
@@ -20,13 +20,18 @@ function shouldRun(currentStage: Stage, lastFailedStage: string | null): boolean
   return currentIdx >= failedIdx
 }
 
-// TODO: 'ko' 추가 (ElevenLabs 크레딧 충전 후)
-const languages = ['ja'] as const
+type Language = 'ja' | 'ko' | 'en'
+const BASE_LANGUAGES: Language[] = ['ja', 'ko']
 
 export type ImageModel = 'fal' | 'gemini-2.5-flash-preview-image' | 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image-preview'
 
-export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal'): Promise<void> {
+export async function runPipeline(
+  videoId: string,
+  imageModel: ImageModel = 'fal',
+  extraLanguages: Language[] = [],
+): Promise<void> {
   try {
+    const languages: Language[] = [...BASE_LANGUAGES, ...extraLanguages]
     const video = await prisma.video.findUniqueOrThrow({
       where: { id: videoId },
       include: {
@@ -91,7 +96,7 @@ export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal
 
       scenes = dbScenes.map((s, i) => ({
         text_ko: s.text,
-        text_en: '',
+        text_en: variants.find((v) => v.language === 'en')?.translatedScript.split('\n')[i] || '',
         text_ja: variants.find((v) => v.language === 'ja')?.translatedScript.split('\n')[i] || '',
         imagePrompt: s.imagePrompt.replace(/\[STYLE\].*?\[\/STYLE\]/, ''),
       }))
@@ -121,6 +126,12 @@ export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal
       await updateStage(videoId, 'tts')
       const existingVariants = await prisma.variant.findMany({ where: { videoId } })
 
+      // Check Qwen3-TTS availability for ko/en
+      const qwen3Available = await isQwen3Available()
+      if (!qwen3Available) {
+        console.warn('[TTS] Qwen3-TTS server not available, skipping ko/en TTS')
+      }
+
       for (const lang of languages) {
         const variant = existingVariants.find((v) => v.language === lang)
         if (variant?.ttsUrl) continue // 이미 생성된 TTS 스킵
@@ -130,16 +141,23 @@ export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal
           ttsPath = await withRetry(() =>
             generateTTSVoicevox(scenes.map((s) => s.text_ja).join(' '), videoId),
           )
-        } else {
+        } else if (qwen3Available) {
           ttsPath = await withRetry(() =>
-            generateTTS(scenes.map((s) => s[`text_${lang}`]).join(' '), lang, videoId),
+            generateTTSQwen3(scenes.map((s) => s[`text_${lang}`]).join(' '), lang, videoId),
           )
+        } else {
+          continue // Skip this language if Qwen3 unavailable
         }
 
         await prisma.variant.update({
           where: { videoId_language: { videoId, language: lang } },
           data: { ttsUrl: ttsPath },
         })
+      }
+
+      // Free Qwen3 model memory after TTS stage
+      if (qwen3Available) {
+        await unloadQwen3Model().catch((e) => console.warn('[TTS] Failed to unload Qwen3 model:', e))
       }
     }
 
@@ -151,6 +169,7 @@ export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal
       for (const lang of languages) {
         const variant = variants.find((v) => v.language === lang)
         if (variant?.srtUrl) continue // 이미 생성된 SRT 스킵
+        if (!variant?.ttsUrl) continue // TTS 없으면 SRT 스킵
 
         const audioDuration = await getAudioDuration(variant!.ttsUrl!)
         const durationPerScene = audioDuration / scenes.length
@@ -178,6 +197,7 @@ export async function runPipeline(videoId: string, imageModel: ImageModel = 'fal
       for (const lang of languages) {
         const variant = variants.find((v) => v.language === lang)
         if (variant?.videoUrl) continue // 이미 렌더된 영상 스킵
+        if (!variant?.ttsUrl) continue // TTS 없으면 렌더 스킵
 
         const sceneTexts = scenes.map((s, i) => ({
           imageUrl: updatedScenes[i].imageUrl!,
