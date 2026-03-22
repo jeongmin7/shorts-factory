@@ -30,14 +30,22 @@ def synthesize():
         return jsonify({"error": "text is required"}), 400
 
     text = data["text"]
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({"error": "text must be a non-empty string"}), 400
+    if len(text) > 2000:
+        return jsonify({"error": "text exceeds 2000 characters"}), 400
+
     language = data.get("language", "ko")
+    valid_languages = {"ko", "en"}
+    if language not in valid_languages:
+        return jsonify({"error": f"language must be one of {valid_languages}"}), 400
 
     # Select voice based on language
     voice_map = {
         "ko": "Chelsie",
         "en": "Chelsie",
     }
-    voice = voice_map.get(language, "Chelsie")
+    voice = voice_map[language]
 
     try:
         tts = get_generator()
