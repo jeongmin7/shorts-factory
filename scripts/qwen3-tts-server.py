@@ -1,6 +1,8 @@
 import argparse
 import io
 import gc
+import subprocess
+import tempfile
 import soundfile as sf
 from flask import Flask, request, jsonify, send_file
 
@@ -18,6 +20,36 @@ def get_generator():
         from mlx_audio.tts import load
         generator = load(MODEL_NAME)
     return generator
+
+
+def apply_speed(audio_bytes: bytes, speed: float) -> bytes:
+    """Apply speed change using ffmpeg atempo filter."""
+    if speed == 1.0:
+        return audio_bytes
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as inp, \
+         tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out:
+        inp.write(audio_bytes)
+        inp.flush()
+
+        # atempo range is 0.5-2.0, chain for values outside
+        filters = []
+        remaining = speed
+        while remaining > 2.0:
+            filters.append("atempo=2.0")
+            remaining /= 2.0
+        while remaining < 0.5:
+            filters.append("atempo=0.5")
+            remaining *= 2.0
+        filters.append(f"atempo={remaining:.4f}")
+
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", inp.name, "-af", ",".join(filters), out.name],
+            capture_output=True,
+        )
+
+        with open(out.name, "rb") as f:
+            return f.read()
 
 
 @app.route("/health", methods=["GET"])
@@ -38,6 +70,7 @@ def synthesize():
         return jsonify({"error": "text exceeds 2000 characters"}), 400
 
     language = data.get("language", "ko")
+    speed = data.get("speed", 1.0)
     valid_languages = {"ko", "en"}
     if language not in valid_languages:
         return jsonify({"error": f"language must be one of {valid_languages}"}), 400
@@ -45,29 +78,30 @@ def synthesize():
     try:
         model = get_generator()
 
-        # model.generate() returns a Generator of GenerationResult
-        # Collect all segments and concatenate audio
         import mlx.core as mx
         audio_segments = []
         sample_rate = 24000
 
-        for result in model.generate(text=text, instruct="차분한 30대 여성", speed=1.4, lang_code=language):
+        for result in model.generate(text=text, lang_code=language):
             audio_segments.append(result.audio)
             sample_rate = result.sample_rate
 
         if not audio_segments:
             return jsonify({"error": "No audio generated"}), 500
 
-        # Concatenate all segments
         full_audio = mx.concatenate(audio_segments, axis=0)
-        audio_list = full_audio.tolist()
 
-        # Write to in-memory WAV buffer
         buf = io.BytesIO()
-        sf.write(buf, audio_list, sample_rate, format="WAV")
-        buf.seek(0)
+        sf.write(buf, full_audio.tolist(), sample_rate, format="WAV")
 
-        return send_file(buf, mimetype="audio/wav", download_name="output.wav")
+        # Apply speed via ffmpeg
+        output_bytes = apply_speed(buf.getvalue(), speed)
+
+        return send_file(
+            io.BytesIO(output_bytes),
+            mimetype="audio/wav",
+            download_name="output.wav",
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -75,7 +109,7 @@ def synthesize():
 @app.route("/synthesize_scenes", methods=["POST"])
 def synthesize_scenes():
     """Generate TTS for multiple scenes in one call (consistent voice).
-    Body: {"scenes": ["text1", "text2", ...], "language": "ko"}
+    Body: {"scenes": ["text1", "text2", ...], "language": "ko", "speed": 1.4}
     Returns: {"segments": [{"audio": base64, "duration": float}, ...]}
     """
     data = request.get_json()
@@ -87,6 +121,7 @@ def synthesize_scenes():
         return jsonify({"error": "scenes must be a non-empty array"}), 400
 
     language = data.get("language", "ko")
+    speed = data.get("speed", 1.0)
     valid_languages = {"ko", "en"}
     if language not in valid_languages:
         return jsonify({"error": f"language must be one of {valid_languages}"}), 400
@@ -96,20 +131,26 @@ def synthesize_scenes():
         import mlx.core as mx
         import base64
 
-        # Join scenes with \n so model splits them internally (consistent voice)
         combined_text = "\n".join(scene_texts)
 
         segments = []
         sample_rate = 24000
 
-        for result in model.generate(text=combined_text, instruct="차분한 30대 여성", speed=1.4, lang_code=language):
+        for result in model.generate(text=combined_text, lang_code=language):
             sample_rate = result.sample_rate
             buf = io.BytesIO()
             sf.write(buf, result.audio.tolist(), sample_rate, format="WAV")
-            audio_b64 = base64.b64encode(buf.getvalue()).decode()
+
+            audio_bytes = apply_speed(buf.getvalue(), speed)
+            audio_b64 = base64.b64encode(audio_bytes).decode()
+
+            # Re-read to get actual duration after speed change
+            speed_buf = io.BytesIO(audio_bytes)
+            info = sf.info(speed_buf)
+
             segments.append({
                 "audio": audio_b64,
-                "duration": result.samples / sample_rate,
+                "duration": info.duration,
             })
 
         return jsonify({"segments": segments, "sample_rate": sample_rate})

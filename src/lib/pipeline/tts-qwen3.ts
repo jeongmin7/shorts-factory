@@ -81,11 +81,12 @@ export async function generateTTSQwen3(
   text: string,
   language: string,
   videoId: string,
+  speed: number = 1.4,
 ): Promise<string> {
   const response = await fetch(`${QWEN3_TTS_URL}/synthesize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, language }),
+    body: JSON.stringify({ text, language, speed }),
     signal: AbortSignal.timeout(120_000),
   })
 
