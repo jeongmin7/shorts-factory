@@ -11,31 +11,64 @@ interface SceneWithText {
   text: string
 }
 
+interface ChunkSubtitle {
+  text: string
+  durationSec: number
+}
+
 export function buildRenderProps(
   scenes: SceneWithText[],
   audioDurationSec: number,
+  sceneDurations?: number[],
+  chunkSubtitles?: ChunkSubtitle[],
 ): ShortsVideoProps {
   const fps = 30
   const totalFrames = Math.ceil(audioDurationSec * fps)
-  const framesPerScene = Math.floor(totalFrames / scenes.length)
 
-  const sceneInputs: SceneInput[] = scenes.map((scene, i) => ({
-    imageUrl: scene.imageUrl,
-    durationInFrames: i === scenes.length - 1
-      ? totalFrames - framesPerScene * (scenes.length - 1)
-      : framesPerScene,
-  }))
+  // 이미지 전환: sceneDurations 사용 (없으면 균등 분할)
+  let sceneInputs: SceneInput[]
+  if (sceneDurations && sceneDurations.length === scenes.length) {
+    const rawFrames = sceneDurations.map((d) => Math.max(1, Math.round(d * fps)))
+    const sumFrames = rawFrames.reduce((a, b) => a + b, 0)
+    rawFrames[rawFrames.length - 1] += totalFrames - sumFrames
+    rawFrames[rawFrames.length - 1] = Math.max(1, rawFrames[rawFrames.length - 1])
 
-  let frameOffset = 0
-  const subtitles: SubtitleInput[] = scenes.map((scene, i) => {
-    const sub = {
-      text: scene.text,
-      startFrame: frameOffset,
-      endFrame: frameOffset + sceneInputs[i].durationInFrames - 1,
-    }
-    frameOffset += sceneInputs[i].durationInFrames
-    return sub
-  })
+    sceneInputs = scenes.map((scene, i) => ({
+      imageUrl: scene.imageUrl,
+      durationInFrames: rawFrames[i],
+    }))
+  } else {
+    const framesPerScene = Math.floor(totalFrames / scenes.length)
+    sceneInputs = scenes.map((scene, i) => ({
+      imageUrl: scene.imageUrl,
+      durationInFrames: i === scenes.length - 1
+        ? totalFrames - framesPerScene * (scenes.length - 1)
+        : framesPerScene,
+    }))
+  }
+
+  // 자막: chunkSubtitles 사용 (없으면 장면 단위)
+  let subtitles: SubtitleInput[]
+  if (chunkSubtitles && chunkSubtitles.length > 0) {
+    let frameOffset = 0
+    subtitles = chunkSubtitles.map((chunk) => {
+      const frames = Math.max(1, Math.round(chunk.durationSec * fps))
+      const sub = { text: chunk.text, startFrame: frameOffset, endFrame: frameOffset + frames - 1 }
+      frameOffset += frames
+      return sub
+    })
+  } else {
+    let frameOffset = 0
+    subtitles = scenes.map((scene, i) => {
+      const sub = {
+        text: scene.text,
+        startFrame: frameOffset,
+        endFrame: frameOffset + sceneInputs[i].durationInFrames - 1,
+      }
+      frameOffset += sceneInputs[i].durationInFrames
+      return sub
+    })
+  }
 
   return {
     scenes: sceneInputs,
@@ -54,12 +87,9 @@ export async function renderVideo(
   const entryPoint = path.resolve('./src/remotion/index.ts')
   const bundled = await bundle({ entryPoint })
 
-  // Remotion은 headless 브라우저에서 렌더링하므로
-  // 로컬 파일을 번들 디렉토리에 복사해야 접근 가능
   const assetDir = path.join(bundled, 'assets')
   await fs.mkdir(assetDir, { recursive: true })
 
-  // 이미지를 번들에 복사
   const mappedScenes = await Promise.all(
     scenes.map(async (s, i) => {
       const srcPath = path.resolve(s.imageUrl)
@@ -72,11 +102,21 @@ export async function renderVideo(
     }),
   )
 
-  // 오디오를 번들에 복사
   const audioFileName = `audio-${language}.wav`
   await fs.copyFile(path.resolve(audioPath), path.join(assetDir, audioFileName))
 
-  const props = buildRenderProps(mappedScenes, audioDurationSec)
+  // 장면 duration + 문장별 자막 데이터 읽기
+  let sceneDurations: number[] | undefined
+  let chunkSubtitles: ChunkSubtitle[] | undefined
+  try {
+    sceneDurations = JSON.parse(await fs.readFile(path.join(UPLOAD_DIR, videoId, 'tts', `${language}_durations.json`), 'utf-8'))
+  } catch { /* 폴백: 균등 분할 */ }
+  try {
+    const { chunks, chunkDurations } = JSON.parse(await fs.readFile(path.join(UPLOAD_DIR, videoId, 'tts', `${language}_chunks.json`), 'utf-8'))
+    chunkSubtitles = chunks.map((text: string, i: number) => ({ text, durationSec: chunkDurations[i] }))
+  } catch { /* 폴백: 장면 단위 자막 */ }
+
+  const props = buildRenderProps(mappedScenes, audioDurationSec, sceneDurations, chunkSubtitles)
   props.audioUrl = `assets/${audioFileName}`
 
   const compositions = await getCompositions(bundled, {

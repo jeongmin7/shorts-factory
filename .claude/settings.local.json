@@ -19,7 +19,13 @@
       "Bash(curl -s -X POST http://localhost:5050/synthesize -H \"Content-Type: application/json\" -d '{\"\"text\"\": \"\"Hello. Today I will tell you an interesting story.\"\", \"\"language\"\": \"\"en\"\"}' --output test_1.7b_en.wav)",
       "Bash(ffprobe -v error -show_entries format=duration -of csv=p=0 test_1.7b_en.wav)",
       "Bash(chmod +x /Users/jeongmin/youtube-shorts-automation/scripts/test-subtitle-sync.sh)",
-      "Bash(./scripts/test-subtitle-sync.sh uploads/cmn1tgkkp000fra3nms1tis5u/tts/ko.wav 6)"
+      "Bash(./scripts/test-subtitle-sync.sh uploads/cmn1tgkkp000fra3nms1tis5u/tts/ko.wav 6)",
+      "Bash(curl -s http://localhost:5050/health)",
+      "Bash(curl -s -X POST http://localhost:5050/synthesize_scenes -H 'Content-Type: application/json' -d '{\"\"\"\"scenes\"\"\"\":[\"\"\"\"첫번째 장면입니다\"\"\"\",\"\"\"\"두번째 장면입니다\"\"\"\",\"\"\"\"세번째 장면입니다\"\"\"\"],\"\"\"\"language\"\"\"\":\"\"\"\"ko\"\"\"\"}')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f''''segments: {len\\(d[\"\"segments\"\"]\\)}''''\\); [print\\(f''''  [{i}] duration={s[\"\"duration\"\"]:.2f}s audio_len={len\\(s[\"\"audio\"\"]\\)}''''\\) for i,s in enumerate\\(d[''''segments'''']\\)]\")",
+      "Bash(curl -s http://localhost:10101/speakers)",
+      "Bash(curl -s --connect-timeout 3 http://localhost:10101/speakers)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

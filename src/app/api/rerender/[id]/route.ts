@@ -16,23 +16,24 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+  const body = await request.json().catch(() => ({}))
+  const { ttsSpeed = 1.0, ttsInstruct = '', voiceKo = 'sohee', voiceEn = 'eric', aivisSpeakerId } = body
 
   const video = await prisma.video.findUnique({ where: { id } })
   if (!video) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Clear TTS, SRT, video URLs so pipeline re-generates them
   await prisma.variant.updateMany({
     where: { videoId: id },
     data: { ttsUrl: null, srtUrl: null, videoUrl: null },
   })
 
-  // Set pipeline stage to 'tts' so it skips scene_split and image_gen
   await prisma.video.update({
     where: { id },
     data: { status: 'generating', pipelineStage: 'tts', errorMessage: null },
   })
 
-  runPipeline(id)
+  const ttsOptions = { speed: Number(ttsSpeed) || 1.0, instruct: ttsInstruct || '', voiceKo, voiceEn, aivisSpeakerId: aivisSpeakerId ? Number(aivisSpeakerId) : undefined }
+  runPipeline(id, 'fal', [], ttsOptions)
 
   return NextResponse.json({ id, status: 'generating', resumeFrom: 'tts' })
 }

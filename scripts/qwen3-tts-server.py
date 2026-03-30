@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
 
-MODEL_NAME = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"
+MODEL_NAME = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit"
 
 # Global model reference (loaded on startup, can be unloaded)
 generator = None
@@ -71,7 +71,9 @@ def synthesize():
 
     language = data.get("language", "ko")
     speed = data.get("speed", 1.0)
-    valid_languages = {"ko", "en"}
+    voice = data.get("voice", "eric")
+    instruct = data.get("instruct", "")
+    valid_languages = {"ko", "en", "ja"}
     if language not in valid_languages:
         return jsonify({"error": f"language must be one of {valid_languages}"}), 400
 
@@ -82,7 +84,11 @@ def synthesize():
         audio_segments = []
         sample_rate = 24000
 
-        for result in model.generate(text=text, lang_code=language):
+        gen_kwargs = {"text": text, "lang_code": language, "voice": voice}
+        if instruct:
+            gen_kwargs["instruct"] = instruct
+
+        for result in model.generate(**gen_kwargs):
             audio_segments.append(result.audio)
             sample_rate = result.sample_rate
 
@@ -122,7 +128,9 @@ def synthesize_scenes():
 
     language = data.get("language", "ko")
     speed = data.get("speed", 1.0)
-    valid_languages = {"ko", "en"}
+    voice = data.get("voice", "eric")
+    instruct = data.get("instruct", "")
+    valid_languages = {"ko", "en", "ja"}
     if language not in valid_languages:
         return jsonify({"error": f"language must be one of {valid_languages}"}), 400
 
@@ -131,20 +139,36 @@ def synthesize_scenes():
         import mlx.core as mx
         import base64
 
-        combined_text = "\n".join(scene_texts)
-
         segments = []
         sample_rate = 24000
 
-        for result in model.generate(text=combined_text, lang_code=language):
-            sample_rate = result.sample_rate
+        # Generate each scene independently — guarantees 1 segment per scene
+        for text in scene_texts:
+            text = text.strip()
+            if not text:
+                segments.append({"audio": "", "duration": 0.0})
+                continue
+
+            gen_kwargs = {"text": text, "lang_code": language, "voice": voice}
+            if instruct:
+                gen_kwargs["instruct"] = instruct
+
+            audio_parts = []
+            for result in model.generate(**gen_kwargs):
+                audio_parts.append(result.audio)
+                sample_rate = result.sample_rate
+
+            if not audio_parts:
+                segments.append({"audio": "", "duration": 0.0})
+                continue
+
+            audio = mx.concatenate(audio_parts, axis=0)
             buf = io.BytesIO()
-            sf.write(buf, result.audio.tolist(), sample_rate, format="WAV")
+            sf.write(buf, audio.tolist(), sample_rate, format="WAV")
 
             audio_bytes = apply_speed(buf.getvalue(), speed)
             audio_b64 = base64.b64encode(audio_bytes).decode()
 
-            # Re-read to get actual duration after speed change
             speed_buf = io.BytesIO(audio_bytes)
             info = sf.info(speed_buf)
 

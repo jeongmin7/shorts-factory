@@ -1,25 +1,37 @@
-import { StatusBadge } from './StatusBadge'
-import { ProgressBar } from './ProgressBar'
-import Link from 'next/link'
+import { StatusBadge } from "./StatusBadge";
+import { ProgressBar } from "./ProgressBar";
+import Link from "next/link";
 
 interface VideoCardProps {
-  id: string
-  title: string
-  status: string
-  pipelineStage: string | null
-  createdAt: string
-  variants: Array<{ language: string; approved: boolean; uploadedAt: string | null }>
+  id: string;
+  title: string;
+  status: string;
+  pipelineStage: string | null;
+  createdAt: string;
+  variants: Array<{
+    language: string;
+    approved: boolean;
+    uploadedAt: string | null;
+  }>;
 }
 
-export function VideoCard({ id, title, status, createdAt, variants }: VideoCardProps) {
+export function VideoCard({
+  id,
+  title,
+  status,
+  createdAt,
+  variants,
+}: VideoCardProps) {
   return (
     <Link href={`/videos/${id}`}>
-      <div className="bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition cursor-pointer">
+      <div className="bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition cursor-pointer w-150">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="text-white font-medium truncate flex-1">{title}</h3>
+          <h3 className="text-white font-medium truncate flex-1 min-w-0 mr-2">
+            {title}
+          </h3>
           <StatusBadge status={status} />
         </div>
-        {(status === 'generating' || status === 'failed') && (
+        {(status === "generating" || status === "failed") && (
           <ProgressBar videoId={id} />
         )}
         <div className="flex gap-2 mt-2">
@@ -27,9 +39,11 @@ export function VideoCard({ id, title, status, createdAt, variants }: VideoCardP
             <span
               key={v.language}
               className={`text-xs px-2 py-0.5 rounded ${
-                v.uploadedAt ? 'bg-purple-900 text-purple-300' :
-                v.approved ? 'bg-green-900 text-green-300' :
-                'bg-gray-700 text-gray-400'
+                v.uploadedAt
+                  ? "bg-purple-900 text-purple-300"
+                  : v.approved
+                    ? "bg-green-900 text-green-300"
+                    : "bg-gray-700 text-gray-400"
               }`}
             >
               {v.language.toUpperCase()}
@@ -37,9 +51,9 @@ export function VideoCard({ id, title, status, createdAt, variants }: VideoCardP
           ))}
         </div>
         <p className="text-gray-500 text-xs mt-2">
-          {new Date(createdAt).toLocaleDateString('ko-KR')}
+          {new Date(createdAt).toLocaleDateString("ko-KR")}
         </p>
       </div>
     </Link>
-  )
+  );
 }

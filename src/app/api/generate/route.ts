@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { title, script, imageModel = 'fal', includeEnglish = false } = await request.json()
+  const { title, script, imageModel = 'fal', includeEnglish = false, ttsSpeed = 1.0, ttsInstruct = '', voiceKo = 'sohee', voiceEn = 'eric', aivisSpeakerId } = await request.json()
 
   if (!title || !script) {
     return NextResponse.json({ error: 'title and script are required' }, { status: 400 })
@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
   })
 
   const extraLanguages = includeEnglish ? (['en'] as const) : []
-  runPipeline(video.id, imageModel as ImageModel, [...extraLanguages])
+  const ttsOptions = { speed: Number(ttsSpeed) || 1.0, instruct: ttsInstruct || '', voiceKo: voiceKo || 'sohee', voiceEn: voiceEn || 'eric', aivisSpeakerId: aivisSpeakerId ? Number(aivisSpeakerId) : undefined }
+  runPipeline(video.id, imageModel as ImageModel, [...extraLanguages], ttsOptions)
 
   return NextResponse.json({ id: video.id, status: 'generating' })
 }

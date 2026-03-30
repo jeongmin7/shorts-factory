@@ -25,15 +25,16 @@ export async function generateTTSQwen3PerScene(
   sceneTexts: string[],
   language: string,
   videoId: string,
+  options: TTSOptions = {},
 ): Promise<{ filePath: string; sceneDurations: number[] }> {
   const dir = path.join(UPLOAD_DIR, videoId, 'tts')
   await fs.mkdir(dir, { recursive: true })
 
-  // Single API call for all scenes — consistent voice across segments
+  const voice = language === 'en' ? (options.voiceEn || 'eric') : (options.voiceKo || 'sohee')
   const response = await fetch(`${QWEN3_TTS_URL}/synthesize_scenes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenes: sceneTexts, language }),
+    body: JSON.stringify({ scenes: sceneTexts, language, voice, speed: options.speed, instruct: options.instruct }),
     signal: AbortSignal.timeout(300_000),
   })
 
@@ -77,16 +78,25 @@ export async function generateTTSQwen3PerScene(
 }
 
 /** Single text TTS (kept for simple use cases) */
+export interface TTSOptions {
+  speed?: number
+  instruct?: string
+  voiceKo?: string
+  voiceEn?: string
+  aivisSpeakerId?: number
+}
+
 export async function generateTTSQwen3(
   text: string,
   language: string,
   videoId: string,
-  speed: number = 1.4,
+  options: TTSOptions = {},
 ): Promise<string> {
+  const voice = language === 'en' ? (options.voiceEn || 'eric') : (options.voiceKo || 'sohee')
   const response = await fetch(`${QWEN3_TTS_URL}/synthesize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, language, speed }),
+    body: JSON.stringify({ text, language, voice, speed: options.speed, instruct: options.instruct }),
     signal: AbortSignal.timeout(120_000),
   })
 

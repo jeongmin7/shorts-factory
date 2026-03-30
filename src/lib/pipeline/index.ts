@@ -2,13 +2,19 @@ import { prisma } from '@/lib/db'
 import { splitAndTranslate, type SceneData } from './scene-splitter'
 import { generateImage } from './image-generator'
 import { generateImageGemini, type GeminiImageModel } from './image-generator-gemini'
-import { generateTTSVoicevox } from './tts-voicevox'
-import { generateTTSQwen3, isQwen3Available, unloadQwen3Model } from './tts-qwen3'
+import { generateTTSAivisPerScene, isAivisAvailable } from './tts-aivis'
+import { generateTTSElevenlabsPerScene } from './tts-elevenlabs'
+import type { TTSOptions } from './tts-qwen3'
 import { saveSRT } from './srt-generator'
 import { renderVideo } from './video-renderer'
 import { withRetry } from './retry'
 import { sendVideoForApproval, sendErrorNotification } from '@/services/telegram'
-import { getAudioDuration, detectSceneBoundaries } from '@/lib/audio-utils'
+import fs from 'fs/promises'
+import path from 'path'
+import { getAudioDuration } from '@/lib/audio-utils'
+import { chunkSceneTexts, deriveSceneDurations } from './text-chunker'
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 
 const STAGES = ['scene_split', 'image_gen', 'tts', 'srt', 'render', 'notify'] as const
 type Stage = typeof STAGES[number]
@@ -29,6 +35,7 @@ export async function runPipeline(
   videoId: string,
   imageModel: ImageModel = 'fal',
   extraLanguages: Language[] = [],
+  ttsOptions: TTSOptions = {},
 ): Promise<void> {
   try {
     const languages: Language[] = [...BASE_LANGUAGES, ...extraLanguages]
@@ -126,28 +133,44 @@ export async function runPipeline(
       await updateStage(videoId, 'tts')
       const existingVariants = await prisma.variant.findMany({ where: { videoId } })
 
-      // Check Qwen3-TTS availability for ko/en
-      const qwen3Available = await isQwen3Available()
-      if (!qwen3Available) {
-        console.warn('[TTS] Qwen3-TTS server not available, skipping ko/en TTS')
-      }
-
       for (const lang of languages) {
         const variant = existingVariants.find((v) => v.language === lang)
         if (variant?.ttsUrl) continue // 이미 생성된 TTS 스킵
 
-        let ttsPath: string
+        // 장면 텍스트를 문장 단위로 분할
+        const sceneTexts = scenes.map((s) => s[`text_${lang}`] as string)
+        const { allChunks, sceneChunkCounts } = chunkSceneTexts(sceneTexts, lang)
+
+        let ttsResult: { filePath: string; sceneDurations: number[] }
         if (lang === 'ja') {
-          ttsPath = await withRetry(() =>
-            generateTTSVoicevox(scenes.map((s) => s.text_ja).join(' '), videoId),
-          )
-        } else if (qwen3Available) {
-          ttsPath = await withRetry(() =>
-            generateTTSQwen3(scenes.map((s) => s[`text_${lang}`]).join(' '), lang, videoId),
-          )
+          // 일본어: Aivis
+          const aivisAvailable = await isAivisAvailable()
+          if (aivisAvailable) {
+            ttsResult = await withRetry(() =>
+              generateTTSAivisPerScene(allChunks, videoId, ttsOptions.aivisSpeakerId),
+            )
+          } else {
+            console.warn('[TTS] AivisSpeech not available, skipping ja')
+            continue
+          }
         } else {
-          continue // Skip this language if Qwen3 unavailable
+          // 한국어/영어: ElevenLabs (실패 시 스킵)
+          try {
+            ttsResult = await generateTTSElevenlabsPerScene(allChunks, lang, videoId)
+          } catch (e) {
+            console.warn(`[TTS] ElevenLabs failed for ${lang}: ${e instanceof Error ? e.message : e}, skipping`)
+            continue
+          }
         }
+
+        // 문장별 duration → 장면별 duration 합산
+        const chunkDurations = ttsResult.sceneDurations
+        const sceneDurations = deriveSceneDurations(chunkDurations, sceneChunkCounts)
+
+        const ttsDir = path.join(UPLOAD_DIR, videoId, 'tts')
+        await fs.writeFile(path.join(ttsDir, `${lang}_durations.json`), JSON.stringify(sceneDurations))
+        await fs.writeFile(path.join(ttsDir, `${lang}_chunks.json`), JSON.stringify({ chunks: allChunks, chunkDurations }))
+        const ttsPath = ttsResult.filePath
 
         await prisma.variant.update({
           where: { videoId_language: { videoId, language: lang } },
@@ -155,10 +178,6 @@ export async function runPipeline(
         })
       }
 
-      // Free Qwen3 model memory after TTS stage
-      if (qwen3Available) {
-        await unloadQwen3Model().catch((e) => console.warn('[TTS] Failed to unload Qwen3 model:', e))
-      }
     }
 
     // Stage 3.5: SRT generation
@@ -171,14 +190,25 @@ export async function runPipeline(
         if (variant?.srtUrl) continue // 이미 생성된 SRT 스킵
         if (!variant?.ttsUrl) continue // TTS 없으면 SRT 스킵
 
-        const texts = scenes.map((s) => s[`text_${lang}`] as string)
-        // Detect actual silence gaps in audio to find scene boundaries
-        const sceneDurations = detectSceneBoundaries(variant!.ttsUrl!, texts.length)
-        const srtScenes = texts.map((text, i) => ({
-          text,
-          durationSec: sceneDurations[i],
-        }))
-        const srtPath = await saveSRT(srtScenes, videoId, lang)
+        // 문장별 duration으로 SRT 생성
+        const chunksPath = path.join(UPLOAD_DIR, videoId, 'tts', `${lang}_chunks.json`)
+        let srtEntries: { text: string; durationSec: number }[]
+        try {
+          const { chunks, chunkDurations } = JSON.parse(await fs.readFile(chunksPath, 'utf-8'))
+          srtEntries = chunks.map((text: string, i: number) => ({
+            text,
+            durationSec: chunkDurations[i],
+          }))
+        } catch {
+          // 폴백: 장면 단위
+          const texts = scenes.map((s) => s[`text_${lang}`] as string)
+          const totalDuration = getAudioDuration(variant!.ttsUrl!)
+          srtEntries = texts.map((text) => ({
+            text,
+            durationSec: totalDuration / texts.length,
+          }))
+        }
+        const srtPath = await saveSRT(srtEntries, videoId, lang)
         await prisma.variant.update({
           where: { videoId_language: { videoId, language: lang } },
           data: { srtUrl: srtPath },

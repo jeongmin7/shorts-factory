@@ -1,7 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+
+const SPEED_OPTIONS = [
+  { value: 1.0, label: '1.0x (기본)' },
+  { value: 1.2, label: '1.2x' },
+  { value: 1.4, label: '1.4x' },
+  { value: 1.6, label: '1.6x' },
+  { value: 1.8, label: '1.8x' },
+  { value: 2.0, label: '2.0x' },
+]
+
+const QWEN3_VOICES = ['serena', 'vivian', 'uncle_fu', 'ryan', 'aiden', 'ono_anna', 'sohee', 'eric', 'dylan']
+
+const AIVIS_SPEAKERS = [
+  { id: 808373280, name: 'ほのか - ノーマル' },
+  { id: 808373281, name: 'ほのか - 悲しみ' },
+  { id: 808373282, name: 'ほのか - 嬉しい' },
+  { id: 808373283, name: 'ほのか - 普通' },
+  { id: 1310138976, name: '阿井田 茂 - ノーマル' },
+  { id: 1310138977, name: '阿井田 茂 - Calm' },
+  { id: 1310138979, name: '阿井田 茂 - Heavy' },
+  { id: 1310138981, name: '阿井田 茂 - Shout' },
+]
 
 const IMAGE_MODELS = [
   { id: 'fal', name: 'Z-Image (fal.ai)', desc: '$0.01/장 | 빠름' },
@@ -14,9 +36,40 @@ export function ScriptForm() {
   const [title, setTitle] = useState('')
   const [script, setScript] = useState('')
   const [imageModel, setImageModel] = useState('fal')
+  const [ttsSpeed, setTtsSpeed] = useState(1.0)
+  const [ttsInstruct, setTtsInstruct] = useState('')
+  const [voiceKo, setVoiceKo] = useState('sohee')
+  const [voiceEn, setVoiceEn] = useState('eric')
+  const [aivisSpeakerId, setAivisSpeakerId] = useState(1310138976)
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+
+  const handlePreview = async (engine: 'qwen3' | 'aivis', lang: string, voice: string, speakerId?: number) => {
+    const key = `${engine}-${lang}`
+    setPreviewLoading(key)
+    try {
+      const res = await fetch('/api/tts-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine, voice, language: lang, speakerId }),
+      })
+      if (!res.ok) throw new Error('Preview failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      if (audioRef.current) {
+        audioRef.current.src = url
+        audioRef.current.hidden = false
+        audioRef.current.play()
+      }
+    } catch {
+      setError('미리듣기 실패 (TTS 서버 확인)')
+    } finally {
+      setPreviewLoading(null)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,7 +80,7 @@ export function ScriptForm() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, script, imageModel }),
+        body: JSON.stringify({ title, script, imageModel, ttsSpeed, ttsInstruct, voiceKo, voiceEn, aivisSpeakerId }),
       })
 
       if (!res.ok) {
@@ -90,6 +143,95 @@ export function ScriptForm() {
             </button>
           ))}
         </div>
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">성우 선택</label>
+        <div className="space-y-2">
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <div className="text-xs text-gray-500 mb-1">한국어</div>
+              <select
+                value={voiceKo}
+                onChange={(e) => setVoiceKo(e.target.value)}
+                className="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-700"
+              >
+                {QWEN3_VOICES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" onClick={() => handlePreview('qwen3', 'ko', voiceKo)} disabled={previewLoading !== null}
+              className="px-3 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm whitespace-nowrap">
+              {previewLoading === 'qwen3-ko' ? '...' : '미리듣기'}
+            </button>
+          </div>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <div className="text-xs text-gray-500 mb-1">영어</div>
+              <select
+                value={voiceEn}
+                onChange={(e) => setVoiceEn(e.target.value)}
+                className="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-700"
+              >
+                {QWEN3_VOICES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" onClick={() => handlePreview('qwen3', 'en', voiceEn)} disabled={previewLoading !== null}
+              className="px-3 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm whitespace-nowrap">
+              {previewLoading === 'qwen3-en' ? '...' : '미리듣기'}
+            </button>
+          </div>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <div className="text-xs text-gray-500 mb-1">일본어 (Aivis)</div>
+              <select
+                value={aivisSpeakerId}
+                onChange={(e) => setAivisSpeakerId(Number(e.target.value))}
+                className="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-700"
+              >
+                {AIVIS_SPEAKERS.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" onClick={() => handlePreview('aivis', 'ja', '', aivisSpeakerId)} disabled={previewLoading !== null}
+              className="px-3 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm whitespace-nowrap">
+              {previewLoading === 'aivis-ja' ? '...' : '미리듣기'}
+            </button>
+          </div>
+          <audio ref={audioRef} className="w-full mt-1" controls hidden />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">음성 배속</label>
+        <div className="flex gap-2">
+          {SPEED_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTtsSpeed(opt.value)}
+              className={`px-3 py-2 rounded-lg border text-sm transition ${
+                ttsSpeed === opt.value
+                  ? 'bg-purple-600 border-purple-500 text-white'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">음성 스타일 (선택)</label>
+        <input
+          type="text"
+          value={ttsInstruct}
+          onChange={(e) => setTtsInstruct(e.target.value)}
+          placeholder="예: 차분한 30대 여성, 밝고 활기찬 20대 남성"
+          className="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-700"
+        />
       </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button

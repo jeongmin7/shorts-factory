@@ -14,15 +14,23 @@ export async function POST(
   const { id } = await params
   const body = await request.json().catch(() => ({}))
   const imageModel = (body.imageModel || 'fal') as ImageModel
+  const ttsSpeed = Number(body.ttsSpeed) || 1.0
+  const ttsInstruct = body.ttsInstruct || ''
 
   const video = await prisma.video.findUnique({ where: { id } })
   if (!video) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // 모델 변경 시 이미지 단계부터 다시 시작하도록 기존 이미지 삭제
   if (body.imageModel && video.pipelineStage === 'image_gen') {
     await prisma.scene.updateMany({
       where: { videoId: id },
       data: { imageUrl: null },
+    })
+  }
+
+  if ((body.ttsSpeed || body.ttsInstruct || body.voiceKo || body.voiceEn || body.aivisSpeakerId) && ['tts', 'srt', 'render'].includes(video.pipelineStage || '')) {
+    await prisma.variant.updateMany({
+      where: { videoId: id },
+      data: { ttsUrl: null, srtUrl: null, videoUrl: null },
     })
   }
 
@@ -31,7 +39,8 @@ export async function POST(
     data: { status: 'generating', errorMessage: null },
   })
 
-  runPipeline(id, imageModel)
+  const ttsOptions = { speed: ttsSpeed, instruct: ttsInstruct, voiceKo: body.voiceKo || 'sohee', voiceEn: body.voiceEn || 'eric', aivisSpeakerId: body.aivisSpeakerId ? Number(body.aivisSpeakerId) : undefined }
+  runPipeline(id, imageModel, [], ttsOptions)
 
   return NextResponse.json({ id, status: 'generating', resumeFrom: video.pipelineStage })
 }
