@@ -21,7 +21,8 @@ const SYSTEM_PROMPT = `You are a script analyzer for YouTube Shorts. Given a Kor
 
 CRITICAL RULES FOR VISUAL CONSISTENCY:
 - First, create a "stylePrefix" that defines the EXACT art style, color palette, character appearance, and rendering technique. This prefix will be prepended to EVERY scene's image prompt.
-- The stylePrefix should describe: art style (e.g. "2D flat cartoon illustration"), color palette (e.g. "pastel colors with bold outlines"), character design (e.g. "a round-faced man with orange hair and blue suit"), and rendering (e.g. "clean vector art, simple shapes, thick black outlines")
+- The stylePrefix should describe: art style (e.g. "2D flat cartoon illustration"), color palette (e.g. "pastel colors with bold outlines"), character design with RECOGNIZABLE PHYSICAL TRAITS of the real person (e.g. for Trump: "a large man with distinctive blonde swept-back hair, long red tie, and navy suit", for Steve Jobs: "a thin man with round glasses, black turtleneck, and jeans"), and rendering (e.g. "clean vector art, simple shapes, thick black outlines")
+- IMPORTANT: The character design MUST include the real person's most iconic physical features (hairstyle, glasses, clothing, body type, facial features) so viewers can immediately recognize who it is, even though you don't use their real name
 - Each scene's imagePrompt should ONLY describe the ACTION and SETTING of that scene, NOT the style or character appearance (those come from stylePrefix)
 - Characters must be described the SAME WAY across all scenes. Pick specific visual traits (hair color, clothing, body shape) and stick to them.
 - All scenes must feel like frames from the SAME cartoon/comic

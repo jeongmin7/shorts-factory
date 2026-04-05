@@ -25,7 +25,23 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f''''segments: {len\\(d[\"\"segments\"\"]\\)}''''\\); [print\\(f''''  [{i}] duration={s[\"\"duration\"\"]:.2f}s audio_len={len\\(s[\"\"audio\"\"]\\)}''''\\) for i,s in enumerate\\(d[''''segments'''']\\)]\")",
       "Bash(curl -s http://localhost:10101/speakers)",
       "Bash(curl -s --connect-timeout 3 http://localhost:10101/speakers)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(pmset -g)",
+      "Bash(sudo pmset:*)",
+      "Bash(chmod +x /Users/jeongmin/youtube-shorts-automation/scripts/daily-generate.sh)",
+      "Bash(crontab:*)",
+      "Bash(launchctl load:*)",
+      "Bash(npx tsx:*)",
+      "Bash(/Users/jeongmin/youtube-shorts-automation/scripts/daily-generate.sh 2>&1)",
+      "Bash(env -i HOME=/Users/jeongmin PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin SHELL=/bin/bash /bin/bash /Users/jeongmin/youtube-shorts-automation/scripts/daily-generate.sh 2>&1)",
+      "Bash(env -i HOME=/Users/jeongmin PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin /opt/homebrew/bin/claude -p \"say hi\")",
+      "Read(//Users/jeongmin/.claude/**)",
+      "Read(//Users/jeongmin/.config/**)",
+      "Bash(env -i HOME=/Users/jeongmin USER=jeongmin TERM=xterm-256color PATH=/opt/homebrew/bin:/usr/bin:/bin /opt/homebrew/bin/claude -p \"say hello\")",
+      "Bash(launchctl unload:*)",
+      "Bash(curl:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(launchctl start:*)"
     ]
   }
 }

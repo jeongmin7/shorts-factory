@@ -1,17 +1,89 @@
 import TelegramBot from 'node-telegram-bot-api'
 import fs from 'fs'
+import { prisma } from '@/lib/db'
+import { runPipeline } from '@/lib/pipeline'
+import { uploadToYouTube } from './youtube'
 
 let bot: TelegramBot | null = null
 
 function getBot(): TelegramBot {
   if (!bot) {
-    bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN!, { polling: false })
+    bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN!, { polling: true })
+    setupCallbackHandler(bot)
   }
   return bot
 }
 
 function getChatId(): string {
   return process.env.TELEGRAM_CHAT_ID!
+}
+
+function setupCallbackHandler(tgBot: TelegramBot) {
+  tgBot.on('callback_query', async (query) => {
+    const data = query.data
+    if (!data) return
+
+    const [action, videoId, language] = data.split(':')
+
+    try {
+      if (action === 'approve' && language) {
+        await prisma.variant.update({
+          where: { videoId_language: { videoId, language } },
+          data: { approved: true },
+        })
+        await tgBot.answerCallbackQuery(query.id, {
+          text: `${language.toUpperCase()} 승인 완료!`,
+        })
+
+        // 승인된 variant 업로드
+        const approvedVariant = await prisma.variant.findUnique({
+          where: { videoId_language: { videoId, language } },
+        })
+        if (approvedVariant) {
+          try {
+            const ytId = await uploadToYouTube(approvedVariant.id)
+            if (ytId) {
+              await tgBot.sendMessage(query.message!.chat.id, `📤 ${language.toUpperCase()} 유튜브 업로드 완료! https://youtube.com/shorts/${ytId}`)
+            }
+          } catch (e) {
+            await tgBot.sendMessage(query.message!.chat.id, `⚠️ ${language.toUpperCase()} 업로드 실패: ${e instanceof Error ? e.message : e}`)
+          }
+        }
+
+        const variants = await prisma.variant.findMany({ where: { videoId } })
+        const allApproved = variants.every((v) => v.approved)
+        if (allApproved) {
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: 'approved' },
+          })
+          await tgBot.sendMessage(query.message!.chat.id, '✅ 모든 언어 승인 완료!')
+        }
+      } else if (action === 'reject' && language) {
+        await prisma.variant.update({
+          where: { videoId_language: { videoId, language } },
+          data: { approved: false },
+        })
+        await tgBot.answerCallbackQuery(query.id, {
+          text: `${language.toUpperCase()} 거절됨`,
+        })
+      } else if (action === 'regenerate') {
+        const video = await prisma.video.findUnique({ where: { id: videoId } })
+        if (video && video.retryCount < 3) {
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: 'generating', retryCount: video.retryCount + 1 },
+          })
+          await tgBot.answerCallbackQuery(query.id, { text: '🔄 재생성 시작...' })
+          runPipeline(videoId)
+        } else {
+          await tgBot.answerCallbackQuery(query.id, { text: '❌ 최대 재생성 횟수(3회) 초과' })
+        }
+      }
+    } catch {
+      await tgBot.answerCallbackQuery(query.id, { text: '오류가 발생했습니다.' })
+    }
+  })
 }
 
 export function buildApprovalKeyboard(videoId: string) {
